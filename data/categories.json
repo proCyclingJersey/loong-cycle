@@ -166,8 +166,7 @@
         "cover": "uploads/003.png",
         "images": [
           "uploads/003.png",
-          "uploads/004.png",
-          "uploads/005.png"
+          "uploads/004.png"
         ]
       },
       {
@@ -5494,5 +5493,10 @@
         ]
       }
     ]
+  },
+  {
+    "id": "uploads",
+    "name": "uploads",
+    "children": []
   }
 ]
