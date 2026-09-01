@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>相册 - Loong Cycle</title>
+  <link rel="icon" type="image/png" href="uploads/avatar.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <a href="index.html" style="display:flex;align-items:center;gap:14px;text-decoration:none;">
+          <img src="uploads/avatar.png" alt="Loong Cycle" class="brand-logo" id="siteAvatar">
+          <div class="brand-text">
+            <h1 class="brand-name" id="siteName">Loong Cycle</h1>
+            <p class="brand-desc" id="siteDescShort"></p>
+          </div>
+        </a>
+      </div>
+      <div class="header-right">
+        <a href="index.html" class="admin-btn" style="background:#444;">← Back</a>
+        <a href="admin.html" class="admin-btn">Admin</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <main class="content" style="width:100%;">
+      <div class="album-detail-header">
+        <div class="breadcrumb" id="breadcrumb"></div>
+        <h2 class="album-detail-title" id="albumTitle">加载中...</h2>
+        <p class="album-meta" id="photoCount" style="margin-top:6px;"></p>
+      </div>
+      <div class="photo-grid" id="photoGrid">
+        <div class="loading">加载中...</div>
+      </div>
+    </main>
+  </div>
+
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close">&times;</button>
+    <img id="lightboxImg" src="" alt="">
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const albumId = parseInt(params.get('id'));
+
+    async function init() {
+      try {
+        const [sRes, cRes] = await Promise.all([
+          fetch('data/settings.json'),
+          fetch('data/categories.json')
+        ]);
+        const settings = await sRes.json();
+        const categories = await cRes.json();
+
+        document.getElementById('siteName').textContent = settings.site_name || 'Loong Cycle';
+        document.title = settings.site_name || 'Loong Cycle';
+        if (settings.avatar) document.getElementById('siteAvatar').src = settings.avatar;
+        if (settings.site_description) {
+          const firstLine = settings.site_description.split('\n').filter(l => l.trim())[0] || '';
+          document.getElementById('siteDescShort').textContent = firstLine + ' | ' + (settings.whatsapp || '');
+        }
+
+        let album = null;
+        let parent = null;
+        for (const p of categories) {
+          const found = p.children.find(c => c.id === albumId);
+          if (found) { album = found; parent = p; break; }
+        }
+
+        if (!album) {
+          document.getElementById('photoGrid').innerHTML = '<div class="loading">相册不存在</div>';
+          return;
+        }
+
+        document.title = album.name + ' - Loong Cycle';
+        document.getElementById('albumTitle').textContent = album.name;
+        document.getElementById('photoCount').textContent = album.photos.length + ' photos';
+        document.getElementById('breadcrumb').innerHTML =
+          `<a href="index.html">Home</a> / <a href="index.html">${escapeHtml(parent.name)}</a> / <span>${escapeHtml(album.name)}</span>`;
+
+        const grid = document.getElementById('photoGrid');
+        if (album.photos.length === 0) {
+          grid.innerHTML = '<div class="loading">暂无图片</div>';
+          return;
+        }
+        grid.innerHTML = '';
+        album.photos.forEach(photo => {
+          const item = document.createElement('div');
+          item.className = 'photo-item';
+          item.innerHTML = `<img src="${photo.filepath}" alt="${escapeHtml(photo.filename)}" loading="lazy">`;
+          item.addEventListener('click', () => openLightbox(photo.filepath));
+          grid.appendChild(item);
+        });
+      } catch (e) {
+        document.getElementById('photoGrid').innerHTML = '<div class="loading">加载失败</div>';
+      }
+    }
+
+    function openLightbox(src) {
+      document.getElementById('lightboxImg').src = src;
+      document.getElementById('lightbox').classList.add('active');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    init();
+  </script>
+</body>
+</html>

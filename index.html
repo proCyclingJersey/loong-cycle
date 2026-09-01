@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loong Cycle - Premium Cycling Jerseys</title>
+  <link rel="icon" type="image/png" href="uploads/avatar.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <img src="uploads/avatar.png" alt="Loong Cycle" class="brand-logo" id="siteAvatar">
+        <div class="brand-text">
+          <h1 class="brand-name" id="siteName">Loong Cycle</h1>
+          <p class="brand-desc" id="siteDescShort"></p>
+        </div>
+      </div>
+      <div class="header-right">
+        <input type="text" class="search-box" id="searchBox" placeholder="Search products...">
+        <a href="admin.html" class="admin-btn">Admin</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-title">All Categories</div>
+      <nav class="category-list" id="categoryList">
+        <a href="#" class="category-item active" data-id="all">All Categories</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <div class="content-header">
+        <h2 class="content-title" id="contentTitle">All Categories</h2>
+        <span class="album-count" id="albumCount">0 albums</span>
+      </div>
+      <div class="album-grid" id="albumGrid">
+        <div class="loading">加载中...</div>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </main>
+  </div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

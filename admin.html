@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>后台管理 - Loong Cycle</title>
+  <link rel="icon" type="image/png" href="uploads/avatar.png">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <!-- 配置页 -->
+  <div id="configPage" class="login-page">
+    <div class="login-box">
+      <img src="uploads/avatar.png" alt="Logo" class="login-logo">
+      <h2>Loong Cycle 管理后台</h2>
+      <p style="font-size:13px;color:#999;margin-bottom:16px;">首次使用请配置GitHub信息</p>
+      <div class="form-group" style="text-align:left;">
+        <label>GitHub 用户名</label>
+        <input type="text" id="ghOwner" placeholder="如 proCyclingJersey" value="proCyclingJersey">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label>仓库名</label>
+        <input type="text" id="ghRepo" placeholder="如 loong-cycle" value="loong-cycle">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label>Personal Access Token</label>
+        <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
+        <p style="font-size:11px;color:#999;margin-top:4px;line-height:1.6;">
+          <strong style="color:#d4af37;">创建步骤：</strong><br>
+          1. <a href="https://github.com/settings/tokens/new?scopes=repo&description=Loong+Cycle+Admin" target="_blank" style="color:#d4af37;">点此打开Classic Token创建页</a><br>
+          2. 确认勾选了 <strong>repo</strong> 权限（页面会自动勾选）<br>
+          3. 拉到底部点绿色 <strong>Generate token</strong> 按钮<br>
+          4. 复制生成的token（ghp_开头），粘贴到上方<br>
+          <span style="color:#e74c37;">注意：token只显示一次，务必复制完整！</span>
+        </p>
+      </div>
+      <button onclick="saveConfig()" class="btn-primary" style="width:100%;padding:12px;">保存并进入</button>
+      <p id="configError" class="login-error"></p>
+      <a href="index.html" class="back-link">← 返回网站首页</a>
+    </div>
+  </div>
+
+  <!-- 管理后台 -->
+  <div id="adminPanel" class="admin-panel" style="display:none;">
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <img src="uploads/avatar.png" alt="" class="admin-avatar">
+        <span>Loong Cycle 管理后台</span>
+      </div>
+      <div class="admin-header-right">
+        <a href="index.html" target="_blank" class="admin-link">查看网站</a>
+        <button onclick="logout()" class="logout-btn">退出</button>
+      </div>
+    </header>
+
+    <div class="admin-body">
+      <nav class="admin-nav">
+        <button class="nav-btn active" data-tab="categories">目录管理</button>
+        <button class="nav-btn" data-tab="settings">店铺设置</button>
+      </nav>
+
+      <div class="tab-content" id="tab-categories">
+        <div class="panel-section">
+          <div class="section-header">
+            <h3>一级目录</h3>
+            <button onclick="showAddCategory(null)" class="btn-primary">+ 添加一级目录</button>
+          </div>
+          <div id="categoryTree" class="category-tree">
+            <div class="loading">加载中...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-settings" style="display:none;">
+        <div class="panel-section">
+          <h3>店铺信息</h3>
+          <div class="form-group">
+            <label>网站名称</label>
+            <input type="text" id="setting_site_name">
+          </div>
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <input type="text" id="setting_whatsapp">
+          </div>
+          <div class="form-group">
+            <label>网站简介（支持换行）</label>
+            <textarea id="setting_site_description" rows="10"></textarea>
+          </div>
+          <div class="form-group">
+            <label>网站头像</label>
+            <div class="avatar-upload">
+              <img id="avatarPreview" src="uploads/avatar.png" alt="">
+              <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+              <button onclick="document.getElementById('avatarInput').click()" class="btn-secondary">更换头像</button>
+            </div>
+          </div>
+          <button onclick="saveSettings()" class="btn-primary">保存设置</button>
+          <p id="settingsMsg" class="form-msg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 相册管理弹窗 -->
+  <div id="albumModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalAlbumTitle">相册管理</h3>
+        <button onclick="closeModal()" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="upload-area">
+          <input type="file" id="photoInput" multiple accept="image/*" style="display:none;">
+          <button onclick="document.getElementById('photoInput').click()" class="btn-primary">+ 上传图片</button>
+          <span class="upload-hint">可多选，上传后自动提交到GitHub</span>
+        </div>
+        <div id="modalPhotoGrid" class="modal-photo-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加/编辑目录弹窗 -->
+  <div id="catModal" class="modal" style="display:none;">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3 id="catModalTitle">添加目录</h3>
+        <button onclick="closeCatModal()" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>目录名称</label>
+          <input type="text" id="catNameInput">
+        </div>
+        <button onclick="saveCategory()" class="btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" style="display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 24px;border-radius:8px;z-index:9999;font-size:14px;"></div>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>
