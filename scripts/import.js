@@ -1,96 +1,266 @@
+/**
+ * import.js - Scan uploads directory and generate categories.json
+ *
+ * Expected directory structure:
+ *   uploads/
+ *     <CategoryName>/
+ *       <AlbumName>/
+ *         001.png
+ *         002.jpg
+ *
+ * Output: data/categories.json
+ */
+
 const fs = require('fs');
 const path = require('path');
 
-// 根目录（loong‑cycle的上级，相册_优化后）
-const SOURCE_ROOT = path.resolve(__dirname, '../../');
-// data文件夹在项目根目录
-const OUTPUT_DATA = path.resolve(__dirname, '../data/categories.json');
-const UPLOAD_DEST = path.resolve(__dirname, '../uploads');
+// ---- Paths ----
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const UPLOADS_DIR = path.join(PROJECT_ROOT, 'uploads');
+const DATA_DIR = path.join(PROJECT_ROOT, 'data');
+const OUTPUT_FILE = path.join(DATA_DIR, 'categories.json');
 
-// 自动确保data文件夹存在
-const dataDir = path.dirname(OUTPUT_DATA);
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+// ---- Supported image extensions ----
+const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
+
+/**
+ * Natural sort: 001, 002, ..., 010, 011 (not 001, 010, 011, 002)
+ */
+function naturalCompare(a, b) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
-if (!fs.existsSync(UPLOAD_DEST)) {
-    fs.mkdirSync(UPLOAD_DEST, { recursive: true });
+
+/**
+ * Check if a filename is an image
+ */
+function isImageFile(name) {
+  return IMAGE_EXTS.has(path.extname(name).toLowerCase());
 }
 
-console.log("源目录：", SOURCE_ROOT);
+/**
+ * Get sorted image files in a directory
+ */
+function getImages(dirPath) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter(entry => entry.isFile() && isImageFile(entry.name))
+    .map(entry => entry.name)
+    .sort(naturalCompare);
+}
 
-function copyFile(src, dest) {
-    if (!fs.existsSync(path.dirname(dest))) {
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
+/**
+ * Get sorted subdirectories in a directory
+ */
+function getSubdirs(dirPath) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name)
+    .sort(naturalCompare);
+}
+
+/**
+ * Convert absolute path to web-relative path with forward slashes
+ */
+function toWebPath(absPath) {
+  return path.relative(PROJECT_ROOT, absPath).replace(/\\/g, '/');
+}
+
+/**
+ * Scan the uploads directory tree and build category data
+ */
+function scanUploads() {
+  const categories = [];
+  let totalAlbums = 0;
+  let totalImages = 0;
+  const emptyAlbums = [];
+  const allReferencedFiles = new Set();
+
+  const categoryDirs = getSubdirs(UPLOADS_DIR);
+
+  for (const categoryName of categoryDirs) {
+    const categoryPath = path.join(UPLOADS_DIR, categoryName);
+    const albumDirs = getSubdirs(categoryPath);
+    const children = [];
+
+    for (const albumName of albumDirs) {
+      const albumPath = path.join(categoryPath, albumName);
+      const images = getImages(albumPath);
+
+      if (images.length === 0) {
+        emptyAlbums.push(categoryName + '/' + albumName);
+        continue;
+      }
+
+      // Build web-relative paths: uploads/Category/Album/image.png
+      const imagePaths = images.map(function(img) {
+        return 'uploads/' + categoryName + '/' + albumName + '/' + img;
+      });
+
+      // Track referenced files for orphan cleanup
+      imagePaths.forEach(function(p) { allReferencedFiles.add(p); });
+
+      children.push({
+        albumId: albumName,
+        albumName: albumName,
+        cover: imagePaths[0],
+        images: imagePaths
+      });
+
+      totalAlbums++;
+      totalImages += images.length;
     }
-    fs.copyFileSync(src, dest);
+
+    if (children.length > 0) {
+      categories.push({
+        id: categoryName,
+        name: categoryName,
+        children: children
+      });
+    }
+  }
+
+  return {
+    categories: categories,
+    totalAlbums: totalAlbums,
+    totalImages: totalImages,
+    emptyAlbums: emptyAlbums,
+    allReferencedFiles: allReferencedFiles
+  };
 }
 
-function readFirstLevel() {
-    const list = fs.readdirSync(SOURCE_ROOT, { withFileTypes: true });
-    const result = [];
-    for (const item of list) {
-        if (item.isDirectory() && item.name !== "loong-cycle") {
-            result.push({
-                id: item.name,
-                name: item.name,
-                children: readSecond(path.join(SOURCE_ROOT, item.name))
-            })
+/**
+ * Remove orphan files (images in uploads not referenced by any album)
+ * and remove empty directories.
+ */
+function cleanupOrphans(allReferencedFiles) {
+  let removedFiles = 0;
+  let removedDirs = 0;
+
+  function walkDir(dirPath) {
+    if (!fs.existsSync(dirPath)) return;
+    var entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      var fullPath = path.join(dirPath, entry.name);
+
+      if (entry.isDirectory()) {
+        walkDir(fullPath);
+        // Remove directory if now empty
+        if (fs.existsSync(fullPath) && fs.readdirSync(fullPath).length === 0) {
+          fs.rmdirSync(fullPath);
+          removedDirs++;
         }
-    }
-    return result;
-}
-
-function readSecond(parentPath) {
-    const dirs = fs.readdirSync(parentPath, { withFileTypes: true });
-    const albums = [];
-    for (const d of dirs) {
-        if (d.isDirectory()) {
-            const fullPath = path.join(parentPath, d.name);
-            const imgs = getImageFiles(fullPath);
-            if (imgs.length === 0) continue;
-
-            const coverFile = imgs[0];
-            const srcImg = path.join(fullPath, coverFile);
-            const destImg = path.join(UPLOAD_DEST, coverFile);
-            copyFile(srcImg, destImg);
-
-            for(const f of imgs){
-                copyFile(path.join(fullPath,f), path.join(UPLOAD_DEST,f));
-            }
-
-            const imageList = imgs.map(f => `uploads/${f}`);
-            albums.push({
-                albumId: d.name,
-                albumName: d.name,
-                cover: `uploads/${coverFile}`,
-                images: imageList
-            })
+      } else if (entry.isFile() && isImageFile(entry.name)) {
+        var relPath = toWebPath(fullPath);
+        if (!allReferencedFiles.has(relPath)) {
+          fs.unlinkSync(fullPath);
+          removedFiles++;
         }
+      }
     }
-    return albums;
+  }
+
+  walkDir(UPLOADS_DIR);
+  return { removedFiles: removedFiles, removedDirs: removedDirs };
 }
 
-function getImageFiles(dir) {
-    const all = fs.readdirSync(dir, { withFileTypes: true });
-    const exts = ['.jpg', '.jpeg', '.png', '.webp'];
-    return all
-        .filter(f => f.isFile())
-        .filter(f => exts.includes(path.extname(f.name).toLowerCase()))
-        .map(f => f.name);
+/**
+ * Validate that every image referenced in categories actually exists on disk
+ */
+function validateCategories(categories) {
+  var missing = [];
+  for (var i = 0; i < categories.length; i++) {
+    var cat = categories[i];
+    for (var j = 0; j < cat.children.length; j++) {
+      var album = cat.children[j];
+      for (var k = 0; k < album.images.length; k++) {
+        var img = album.images[k];
+        var fullPath = path.join(PROJECT_ROOT, img);
+        if (!fs.existsSync(fullPath)) {
+          missing.push(img);
+        }
+      }
+    }
+  }
+  return missing;
 }
 
-async function run() {
-    console.log("开始扫描文件夹...");
-    const categories = readFirstLevel();
-    fs.writeFileSync(OUTPUT_DATA, JSON.stringify(categories, null, 2), 'utf8');
-    console.log("✅已生成 categories.json");
-    let albumCount = 0;
-    categories.forEach(c => albumCount += c.children.length);
-    console.log(`一级目录${categories.length}个，相册${albumCount}个`);
-    console.log("运行完成！");
-}
+// ============================================================
+// Main
+// ============================================================
+function main() {
+  console.log('============================================================');
+  console.log('  Loong Cycle - Import Script');
+  console.log('============================================================');
+  console.log('');
 
-run().catch(err => {
-    console.error(err);
+  // Check uploads directory exists
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    console.error('[ERROR] uploads directory not found:');
+    console.error('        ' + UPLOADS_DIR);
+    console.error('');
+    console.error('Please run sync.bat first to copy images into uploads/.');
     process.exit(1);
-})
+  }
+
+  // Step 1: Scan
+  console.log('[1/4] Scanning uploads directory...');
+  console.log('      Path: ' + UPLOADS_DIR);
+  var result = scanUploads();
+
+  console.log('      Categories : ' + result.categories.length);
+  console.log('      Albums     : ' + result.totalAlbums);
+  console.log('      Images     : ' + result.totalImages);
+
+  if (result.emptyAlbums.length > 0) {
+    console.log('      Empty albums skipped: ' + result.emptyAlbums.length);
+    result.emptyAlbums.forEach(function(a) {
+      console.log('        - ' + a);
+    });
+  }
+  console.log('');
+
+  // Step 2: Validate
+  console.log('[2/4] Validating image references...');
+  var missing = validateCategories(result.categories);
+  if (missing.length > 0) {
+    console.warn('      [WARN] Missing images: ' + missing.length);
+    missing.forEach(function(m) {
+      console.warn('        - ' + m);
+    });
+  } else {
+    console.log('      All ' + result.totalImages + ' images verified.');
+  }
+  console.log('');
+
+  // Step 3: Cleanup orphans
+  console.log('[3/4] Cleaning up orphan files...');
+  var cleanup = cleanupOrphans(result.allReferencedFiles);
+  console.log('      Removed orphan files: ' + cleanup.removedFiles);
+  console.log('      Removed empty dirs  : ' + cleanup.removedDirs);
+  console.log('');
+
+  // Step 4: Write JSON
+  console.log('[4/4] Writing categories.json...');
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(result.categories, null, 2), 'utf8');
+  console.log('      Output: ' + OUTPUT_FILE);
+  console.log('');
+
+  // Summary
+  console.log('============================================================');
+  console.log('  Import Complete!');
+  console.log('============================================================');
+  console.log('  Categories : ' + result.categories.length);
+  console.log('  Albums     : ' + result.totalAlbums);
+  console.log('  Images     : ' + result.totalImages);
+  console.log('  Missing    : ' + missing.length);
+  console.log('  Orphans    : ' + cleanup.removedFiles + ' files, ' + cleanup.removedDirs + ' dirs');
+  console.log('============================================================');
+}
+
+main();
